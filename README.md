@@ -1,72 +1,161 @@
-# light-sdk
-or: a tool for building Tools
+# BrightNoise Lite
 
-## tl;dr
-This repository contains the scaffolding for building simple tools for the Light Phone III. Included are a library ([:sdk:client](./sdk/client)) and placeholder application ([:tool](./tool)) that depends on it. To create a tool that is fully compatible with LightOS, you must write your application code within the `tool` module, using the primitives provided by the sdk client library.
+White noise and background sound for the Light Phone III, built as an official Light SDK tool.
+Launcher label **BrightNoise Lite**, tool id `com.gios.brightnoiselite`.
 
-You can and should use current Android best practices: Kotlin for all source code, Compose for UI, Coroutines for async programming, and MVVM architecture. **Although this is appears to be a fairly standard Android dev environment, you will quickly find out that we are (gently but broadly) restricting which Android APIs and third-party libraries can be used. This is in an effort to provide a secure and distinctly _light_ experience for our users. These restrictions are _not_ set in stone and should ease up over time. If there is a stable, open-source library that you'd like us to allow, please let us know! More on this later.**
+This is the SDK version of [BrightNoise](https://github.com/gi-os/BrightNoise), a sideloaded
+app. Almost all of it carries over: the same twelve synthesised sounds, the two-layer mixer, the
+sleep timer with its fade-out, and the wheel. What changed is how the sound gets to the speaker,
+because the SDK does not allow the audio path the full app uses. That change is explained below.
 
-## IMPORTANT!! July 1, 2026 Update
-If you're reading this, welcome! You're early! (in a cool way)
-This repo is a work-in-progress and will remain so for a while. Things are going to change _fast_ in the coming weeks. If you're going to start building right away, be sure to `git pull` frequently.
-Before you do, though, please be aware that **while we feel good about letting everybody start to explore and build, we are still working on the infrastructure to properly deploy your new tools.**
-The currently builds of LightOS in the wild are not yet ready to "play nice" with the tools built here. If you're someone who's already comfortable working with ADB to sideload APKs on your
-Light Phone III, you can totally do that with whatever you do here! But we're shooting to make these tools feel as seamless as the ones already available in LightOS, and that's going to take a bit more work. 
-We're hoping to have an update on that front later this month. In the meantime, the best way to start working is to use an Android emulator running our new [LightOS Emulator](sdk/emulator). The instructions for getting that up and running
-are [right here](docs/system_app).
+## What it does
 
-## Quickstart
+**Sounds.** Twelve sounds, all synthesised on the phone. The tool carries no audio files.
 
-### Running your Tool
-**You can test your tool on any Android device or emulator**, but certain functionality (receiving push notifications, requesting special permissions) can only be tested with:
-A) Real Light Phone hardware running LightOS
-B) An Android emulator (on your computer) set up to run our LightOS emulator app as a _system app_ ([see advanced instructions](docs/system_app))
+| | Sound | How it is made |
+|---|---|---|
+| 1 | White noise | Uniform noise, rolled off above 14 kHz |
+| 2 | Pink noise | Kellet economy filter, -3 dB/oct |
+| 3 | Brown noise | Leaky integrator, -6 dB/oct |
+| 4 | Rain | Hiss, a mid body and about 55 discrete drops a second, with slow gusts |
+| 5 | Thunderstorm | Heavier rain plus a swept low rumble every 20-70 s |
+| 6 | Ocean waves | A 7-13 s swell driving a lowpass sweep and foam |
+| 7 | Stream | Two noise bands around 620 Hz and 1.65 kHz, plus drifting gurgles |
+| 8 | Fan | Oscillating head on a 7.1 s sweep, mains hum, blade beating |
+| 9 | Train | Rail rumble with a rail-joint clack every 1.5 s or so |
+| 10 | Campfire | Ember bed with woody crackles that come in bursts |
+| 11 | Cafe | Fourteen quiet talkers of formant-filtered noise, plus cutlery |
+| 12 | Wind | One gust envelope driving level, cutoff and leaf hiss together |
 
-You can quickly [create an emulator](https://developer.android.com/studio/run/managing-avds) that generally feels like an LPIII by using the following settings:
-* 1080 X 1240, 3.92" display
-* Android API 34
-* NO Google Play Services installed
+The synthesis code (`audio/Dsp.kt`, `audio/Sounds.kt`) is the full app's, unchanged apart from
+the package name and one read-only property on the limiter. Its test suite came across too.
 
-### Start Building
-1. Fork and/or clone this repository into your local dev environment.
-2. Install Android Studio and open this project within it. (IntelliJ IDEA should also work)
+**Three tabs**, with the transport (what is playing, and a PLAY/STOP button that inverts while
+playing) always visible above them:
 
-3. Edit the code in `HomeScreen` and `HomeScreenViewModel` to get started. `Homescreen` surfaces a `@Composable` method named `Content`. This is the UI that is shown when the tool first boots. You'll notice this UI sources data from it's `viewModel` field, which is an instance of `HomeScreenViewModel`. Edit that class with your screen's logic and expose the data to the UI using either Compose `State` or Coroutine `Flow`s. If you want to create a new screen, create a new Screen/ViewModel pair: your screen should extend from `LightScreen` and your VM from `LightScreenViewModel`. Your screen implementation will need:
-   1. A direct reference to your ViewModel's class type
-   2. A factory method for creating a new instance of your ViewModel.
+- **SOUNDS**: tap a sound to play it on layer A straight away.
+- **MIX**: layer A and layer B, each with any of the twelve sounds or NONE, and their own level,
+  plus the output volume. Levels are segmented bars you can tap or drag.
+- **TIMER**: off, 15, 30, 45, 60, 90 or 120 minutes. The volume fades out over the last 25
+  seconds and playback stops. Picking a timer while sound is playing starts it from now.
 
-Look at `HomeScreen` as an example for how this is done. To navigate to your new screen, use the `navigateTo` function built into `LightScreen` - just pass it a lambda to create an instance of your new screen. Note that the `LightScreen` constructor takes in a `SealedLightActivity`. The lambda is provided an instance of this as a default parameter.
+The mix and the timer choice are saved, so the tool reopens on whatever you fell asleep to.
 
-Since LightOS does not use Android system navigation, we provide a back button for you. As long as you use `navigateTo` to move between screens, our back button should work great. If need be, you can override the `onBackPressed` method in your `LightViewModel`.
+**Sound keeps playing with the screen off and after you leave the tool.** It goes out through the
+SDK's detached player (`detached-audio` in `lighttool.toml`). Open the tool again and it picks up
+the running session: the transport, the countdown and STOP all work on it.
 
-### Submitting Your Tool
-Given our relatively limited resources and desire to keep our users safe, we're requiring that all community tools be open source (including our own!). 
-Tools are built and signed directly from a publicly available git commit, and we'll be archiving the source at build time.
-You're free to build and share privately, but LightOS won't let you install tools that are not signed by us without acknowledging privacy and performance risks.
-We won't block users from performing these "dangerous" sideloads, but we're not going to encourage it either. 
-Using the Dashboard, developers are able to queue up a build of your tool on our servers, and if it follows our guidelines and compiles cleanly, we will hand you back a signed, shareable APK.
+**The wheel changes the volume.** On the MIX tab it moves whichever level is marked (WHEEL); tap
+a level's label or bar to move the wheel to it. On the other tabs it always moves the output
+volume. One notch is one bar of sixteen. As in the full app, the first notch after a pause is
+held until a second one confirms it, so a thumb brushing the wheel in the dark does not change
+anything. The keys are read in `LightViewModel.onKeyDown`, using the same `WHEEL_CCW` /
+`WHEEL_CW` labels and the same Pixart scancode fallback as the full app.
 
-1. Review the [Tool Guidelines](TOOL_GUIDELINES.md) to get a sense of the kind of tools we're hoping to showcase.
-2. Ensure your tool is built with the latest Light SDK version and is accessible via a public Github repo.
-3. Enable developer mode on the [dashboard](https://dashboard.thelightphone.com/): Settings -> Account -> Developer Account.
-4. From there, you can create your tool: Settings -> Account -> Developer Account -> Manage Custom Tools -> Submit New Tool:
-  - The package name is unique for all tools and can't be changed later. It is pulled from the default branch of the Github repo submitted upon registering the tool.
-  - You'll then have the opportunity to add images. You can add them later on as well, but we'll require at least one for a tool to be approved.
-5. Now go in the tool detail page and press "submit build":
-  - Enter the git ref of the version of the tool to be built and a small description of the changelog.
-  - If your tool already has an active build, you won't be able to submit another.
-  - The `versionCode` of the submitted build should be higher than the one of the last version listed in the Tool page.
-6. Wait for the build to finish:
-  - In case of an error, use the "view details" button on the "Builds" section of the Tool page to check the error message. The "retry build" can be used to re-attempt building from the same git ref if necessary.
-  - If you believe the build error is due to an issue on our end (e.g. with light-sdk or our infrastructure), please feel free to open an Issue on this repo!
-  - In case of success, the "download apk" button should appear. A new "Version" entry will be created with "pending approval" status.
-7. Our team will review the builds and reach out to you via e-mail if we have any feedback regarding the approval process.
-8. If you have any questions, please e-mail us at tools@thelightphone.com
+## How the sound is played, and why
 
-### Sharing Your Tool
-Once we release a version of LightOS that supports community tools, users will have an option to choose what kind of tools they want to be able to run on their device:
-- **Light-approved tools**: These include tools that are either built internally by the Light team, or built by the community and officially tested/signed-off by the Light team. We don't know _exactly_ what that sign-off process is going to look like, but as a heads-up: we're going to be looking pretty hard at whether a submitted tool matches the Light ethos both functionally and aesthetically. We've included a UX/UI library to make this as easy as possible! From a technical standpoint, these approved tools are both signed by us _and_ added to an "allow-list" within LightOS. Phones with this option selected will only install and display tools that meet both criteria.
-- **SDK-built tools**: This is a slightly more permissive choice. Phones with this option selected will install and launch any tool that was built and signed by Light. These don't require any manual approval by us (although we can block them in extreme cases). If a user wants to be able to install a tool that was shared locally or somewhere outside of Light's dashboard, but they still want to be confident that it will run well and integrate nicely with LightOS, they might choose this option.
-- **Any tools**: A user will have the option to make any APK launchable from LightOS, but they will own the responsibility of getting them installed/uninstalled. When a user selects this option, we will warn them that they are potentially opening their device up to security risks, and that doing so will limit our ability to support them if something goes wrong.
+The full app runs its own audio thread that writes the mix into an `AudioTrack` stream forever,
+inside a foreground service with a partial wake lock. A tool cannot do that: a foreground service
+means `android.app.Service`, and `android.app.*` is a blocked import. The SDK offers two ways to
+make sound instead:
 
-## [Complete Documentation](./docs)
+1. `LightAudioVoice`, which plays one short mono 16-bit PCM buffer at a time. It is a static
+   `AudioTrack` that is restarted on every call, it takes transient audio focus, and it belongs
+   to the screen. Chaining buffers by re-triggering it would leave a gap or a click at each
+   restart, and it would stop when the tool went to the background.
+2. `LightAudioPlayer` in detached mode, which is a media3 player hosted in the SDK's own
+   service. It plays a queue of files and keeps going with the tool closed. It has no streaming
+   input and no repeat mode.
+
+Only the second can play all night, so the tool renders sound to files and queues them:
+
+- Each layer is synthesised into a **three-minute loop**. The generator runs four seconds past
+  the end, and those four seconds are crossfaded (equal power) into the start, so the end of the
+  loop flows into material that was generated after it. There is no seam, only a three-minute
+  repeat, which is long enough that thunder and swells do not line up into a pattern.
+- The two layers are mixed with the full app's gain law, makeup gain, look-ahead limiter and
+  soft clip. The limiter is run around the loop (warmed up on its end, flushed with its start),
+  so it is in the right state at the join.
+- The result is written as a 16-bit mono WAV, along with a two-second fade-in to start on and,
+  when the timer is on, a tail that fades out over 25 seconds and ends. The queue is fade-in,
+  then the loop as many times as needed, then the tail. With the timer off it is 240 loops,
+  just over twelve hours, because a queue has to end somewhere.
+- WAV is uncompressed, so there is no encoder padding and the player moves from one copy of
+  the loop to the next without a gap.
+
+Some things follow from this:
+
+- **Choosing a sound takes a moment.** A new sound has to be synthesised before it can play
+  ("Preparing..." under the title). The saved sounds are rendered when the tool opens, so the
+  first PLAY is usually quick.
+- **Level and volume changes have a short gap.** A level change remixes the loop and swaps the
+  file that is playing for the same material at the new level, from the same point. Nothing
+  restarts and the timer keeps its end time, but the player needs a fraction of a second to open
+  the new file. Changes are collected for 0.6 s, so one turn of the wheel is one swap.
+- **Memory and storage.** Two rendered layers and the mix take about 48 MB of memory while the
+  tool is open, and the files on disk are about 16 MB per three minutes of loop. Old files are
+  deleted as soon as the player stops using them.
+
+## What was dropped, and why
+
+| Feature in BrightNoise | Why it is not here |
+| --- | --- |
+| The foreground service with its own `AudioTrack` stream | `android.app.Service` is blocked. Replaced by the SDK's detached player and pre-rendered loops, as above. |
+| The partial wake lock | `PowerManager` comes from `getSystemService`, which is blocked. The SDK's playback service is what keeps audio going with the screen off. |
+| The notification with a Stop action | Tools have no notification API (`NotificationManager` needs `getSystemService`). Stop from the tool. The SDK's media session may still show a system media control, depending on LightOS. |
+| Smooth level ramps while a level moves | The live engine ramped gains sample by sample. A file player can only switch files, so a change lands after a short gap. |
+| Wheel scrolling of the sound list and mixer | The wheel now sets the volume, which is the more useful job when sound is already playing in the dark. The lists still scroll by touch. |
+| Shake to report a glitch, the crash log and report sheet | Need `SensorManager` from `getSystemService`, and filing a report used `Intent`. Both are blocked. |
+| The Akkurat font pulled from `SystemFonts` | The tool uses the SDK's `LightText` styles, which already follow LightOS typography. |
+
+## Tests
+
+The synthesis and loop code has no Android imports, so it runs on the JVM:
+
+```sh
+./gradlew -DlightSdk.toolOnly=true :tool:testDebugUnitTest
+```
+
+- `DspTest` is the full app's suite: every sound rendered for 60-120 s with no non-finite
+  samples, no clipping, no DC drift and a sensible level; the fan, campfire and cafe character
+  checks; and the limiter's ceiling, transparency and release.
+- `LoopTest` checks that the loop join is no rougher than the middle of the loop, that the
+  crossfade keeps the level flat, that a full two-layer mix stays under full scale, that levels
+  follow the square law, and that every timer preset ends on the exact sample with a full fade.
+- `QueueTest` covers how a remix carries on from the current point; `WavTest` the file format;
+  `WheelGuardTest` the stray-notch guard; `SettingsTest` the saved settings.
+
+## Build
+
+You need JDK 17 and the Android SDK (platform 36).
+
+```sh
+./gradlew -DlightSdk.toolOnly=true :tool:assembleDebug
+./gradlew -DlightSdk.toolOnly=true :tool:testDebugUnitTest :tool:lintDebug
+```
+
+CI (`.github/workflows/build-tool.yml`) runs the tests, lint and the debug build on every push
+with the same flags as Light's tool builder. It publishes nothing.
+
+To install on a phone or emulator running the Light SDK server, see `./gradlew :tool:uploadTool`
+in `tool/build.gradle.kts`.
+
+## Permissions
+
+None. The only capability is `detached-audio`, for playing with the tool closed.
+
+## Tool Library submission notes
+
+- The tool id, label and version live in `tool/lighttool.toml`. Bump `versionCode` for every
+  submission.
+- Everything is in the `tool` module. `sdk/`, `plugin/` and `lint-rules/` are upstream and
+  unmodified, so this repository can be rebased onto
+  [lightphone/light-sdk](https://github.com/lightphone/light-sdk).
+- No dependencies beyond the SDK client: Compose, DataStore and coroutines come with it.
+- No reflection, no blocked imports, no custom manifest.
+
+## Credits
+
+Built on [lightphone/light-sdk](https://github.com/lightphone/light-sdk) (MIT); see `LICENSE`.
+The sounds, mixer and limiter are ported from
+[gi-os/BrightNoise](https://github.com/gi-os/BrightNoise) (MIT).
