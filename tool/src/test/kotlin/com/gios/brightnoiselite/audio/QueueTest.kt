@@ -6,7 +6,7 @@ import kotlin.test.assertNull
 
 class QueueTest {
 
-    private val lengths = mapOf(Part.Head to 100, Part.Loop to 1000, Part.Tail to 500)
+    private val lengths = mapOf(Part.Head to 100_000, Part.Loop to 1_000_000, Part.Tail to 500_000)
     private fun len(p: Part) = lengths.getValue(p)
 
     private val queue = LiveQueue.fresh(QueuePlan(headFrames = 100, loops = 3, tailFrames = 500))
