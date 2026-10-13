@@ -36,8 +36,6 @@ import com.thelightphone.sdk.InitialScreen
 import com.thelightphone.sdk.LightScreen
 import com.thelightphone.sdk.SealedLightActivity
 import com.thelightphone.sdk.audio.DefaultLightAudio
-import com.thelightphone.sdk.ui.LightBarButton
-import com.thelightphone.sdk.ui.LightBottomBar
 import com.thelightphone.sdk.ui.LightScrollView
 import com.thelightphone.sdk.ui.LightText
 import com.thelightphone.sdk.ui.LightTextVariant
@@ -114,20 +112,53 @@ class NoiseScreen(private val sealedActivity: SealedLightActivity) :
                     active = playing || busy,
                     onToggle = vm::togglePlay,
                 )
-                LightBottomBar(
+                TabBar(
                     listOf(
-                        tabButton("SOUNDS", tab == Tab.Sounds) { vm.selectTab(Tab.Sounds) },
-                        tabButton("MIX", tab == Tab.Mix) { vm.selectTab(Tab.Mix) },
-                        tabButton("TIMER", tab == Tab.Timer) { vm.selectTab(Tab.Timer) },
+                        TabItem("SOUNDS", tab == Tab.Sounds) { vm.selectTab(Tab.Sounds) },
+                        TabItem("MIX", tab == Tab.Mix) { vm.selectTab(Tab.Mix) },
+                        TabItem("TIMER", tab == Tab.Timer) { vm.selectTab(Tab.Timer) },
                     ),
                 )
             }
         }
     }
 
-    /** LightOS action-bar idiom: the active tab is bracketed. */
-    private fun tabButton(label: String, active: Boolean, onClick: () -> Unit) =
-        LightBarButton.Text(text = if (active) "[$label]" else label, onClick = onClick)
+}
+
+private class TabItem(val label: String, val active: Boolean, val onClick: () -> Unit)
+
+/**
+ * The tab row, drawn like LightOS's bottom action bar: the same height, side padding
+ * and button text, with the active tab bracketed. LightBottomBar gives each of three
+ * text items an equal third of the width, and "[SOUNDS]" is wider than a third on the
+ * LP3's 1080-pixel screen, so it came out as "[SOUN…". Here each label takes the width
+ * it needs and the gaps take the rest.
+ */
+@Composable
+private fun TabBar(items: List<TabItem>) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(4f.gridUnitsAsDp())
+            .padding(horizontal = 2f.gridUnitsAsDp()),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        items.forEach { item ->
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .lightClickable(onClick = item.onClick),
+                contentAlignment = Alignment.Center,
+            ) {
+                LightText(
+                    text = if (item.active) "[${item.label}]" else item.label,
+                    variant = LightTextVariant.Button,
+                    maxLines = 1,
+                )
+            }
+        }
+    }
 }
 
 @Composable
