@@ -97,7 +97,7 @@ class NoiseScreen(private val sealedActivity: SealedLightActivity) :
                     when (tab) {
                         Tab.Sounds -> SoundsTab(settings) { vm.playNow(it) }
                         Tab.Mix -> MixTab(settings, target, vm)
-                        Tab.Timer -> TimerTab(settings, endsAt, leftSeconds) { vm.setTimer(it) }
+                        Tab.Timer -> TimerTab(settings, endsAt, leftSeconds, playing || busy) { vm.setTimer(it) }
                     }
                 }
                 Transport(
@@ -110,6 +110,7 @@ class NoiseScreen(private val sealedActivity: SealedLightActivity) :
                         else -> "Stopped"
                     },
                     active = playing || busy,
+                    isError = message != null,
                     onToggle = vm::togglePlay,
                 )
                 TabBar(
@@ -241,7 +242,13 @@ private fun LayerSection(
 
 /** Tab 3: the sleep timer. */
 @Composable
-private fun TimerTab(settings: Settings, endsAt: Long, leftSeconds: Long, onPick: (Int) -> Unit) {
+private fun TimerTab(
+    settings: Settings,
+    endsAt: Long,
+    leftSeconds: Long,
+    active: Boolean,
+    onPick: (Int) -> Unit,
+) {
     TabBody {
         LightText(
             text = when {
@@ -267,6 +274,13 @@ private fun TimerTab(settings: Settings, endsAt: Long, leftSeconds: Long, onPick
                 ) { onPick(minutes) }
             }
         }
+        if (!active) {
+            LightText(
+                text = "Starts when you press PLAY.",
+                variant = LightTextVariant.Detail,
+                modifier = Modifier.padding(top = 1f.gridUnitsAsDp()),
+            )
+        }
         LightText(
             text = "The sound fades out over the last 25 seconds, then stops.",
             variant = LightTextVariant.Detail,
@@ -281,14 +295,22 @@ private fun TimerTab(settings: Settings, endsAt: Long, leftSeconds: Long, onPick
  * reach for in the dark.
  */
 @Composable
-private fun Transport(label: String, status: String, active: Boolean, onToggle: () -> Unit) {
+private fun Transport(
+    label: String,
+    status: String,
+    active: Boolean,
+    isError: Boolean,
+    onToggle: () -> Unit,
+) {
     val colors = LightThemeTokens.colors
     Column {
         Rule()
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(2f.gridUnitsAsDp()),
+                // An error wraps to two lines at Copy size, which needs a taller row than the
+                // label and status pair.
+                .height(if (isError) 3f.gridUnitsAsDp() else 2f.gridUnitsAsDp()),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(
@@ -296,14 +318,23 @@ private fun Transport(label: String, status: String, active: Boolean, onToggle: 
                     .weight(1f)
                     .padding(horizontal = 1f.gridUnitsAsDp()),
             ) {
-                LightText(text = label, variant = LightTextVariant.Copy, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                LightText(
-                    text = status,
-                    variant = LightTextVariant.Detail,
-                    lighten = true,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                if (isError) {
+                    LightText(
+                        text = status,
+                        variant = LightTextVariant.Copy,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                } else {
+                    LightText(text = label, variant = LightTextVariant.Copy, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    LightText(
+                        text = status,
+                        variant = LightTextVariant.Detail,
+                        lighten = true,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
             Box(
                 modifier = Modifier

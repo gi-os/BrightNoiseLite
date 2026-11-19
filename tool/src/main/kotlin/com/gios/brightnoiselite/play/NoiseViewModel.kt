@@ -119,7 +119,7 @@ class NoiseViewModel(
         }
         viewModelScope.launch {
             playerFlow.flatMapLatest { it?.error ?: flowOf(null) }.collect { error ->
-                if (error != null) _message.value = "Playback stopped (${error.diagnostic})"
+                if (error != null) _message.value = "Playback stopped. Press PLAY to try again."
             }
         }
         viewModelScope.launch {
@@ -144,7 +144,7 @@ class NoiseViewModel(
                 delay(250)
             }
         }
-        _message.value = "Audio is busy. Close and reopen the tool."
+        _message.value = "Audio is busy. Close the tool and open it again."
         return null
     }
 
@@ -173,8 +173,10 @@ class NoiseViewModel(
     }
 
     private fun start() {
+        // A new press starts clean; a failure sets its own message again.
+        _message.value = null
         if (!_settings.value.hasSound) {
-            _message.value = "Both layers are off. Pick a sound first."
+            _message.value = "Pick a sound first."
             return
         }
         remixJob?.cancel()
@@ -237,7 +239,7 @@ class NoiseViewModel(
                 } catch (e: kotlinx.coroutines.CancellationException) {
                     throw e
                 } catch (e: Exception) {
-                    _message.value = "Could not prepare the sound (${e.message ?: "error"})"
+                    _message.value = "Could not play this sound. Try again."
                 } finally {
                     _busy.value = false
                 }
@@ -247,15 +249,15 @@ class NoiseViewModel(
 
     /** Builds a whole new session: fade-in head, loops, and a fading tail if the timer is on. */
     private suspend fun startFresh() {
-        val player = playerFlow.value ?: return
-        if (!player.awaitReady()) return
+        val player = playerFlow.value ?: return couldNotStart()
+        if (!player.awaitReady()) return couldNotStart()
         val s = _settings.value
         val plan = QueuePlan.forTimer(s.timerMinutes * 60)
         val queue = LiveQueue.fresh(plan)
         val items = withContext(Dispatchers.Default) {
             val loop = Renders.loopFor(s) ?: return@withContext null
             withContext(Dispatchers.IO) { filesFor(queue, loop) }
-        } ?: return
+        } ?: return couldNotStart()
         player.setMediaQueue(items.toAudioItems(s))
         player.play()
         Renders.live = queue
@@ -263,6 +265,10 @@ class NoiseViewModel(
             if (plan.hasTail) System.currentTimeMillis() + plan.totalFrames * 1000L / SAMPLE_RATE else 0L,
         )
         withContext(Dispatchers.IO) { Renders.sweep(dir, items) }
+    }
+
+    private fun couldNotStart() {
+        _message.value = "Could not start. Try again."
     }
 
     /**
